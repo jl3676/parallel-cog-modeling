@@ -59,8 +59,14 @@ def plot_fit_metric(data: np.ndarray, optimizer: modeling.Optimizer, best_nllh_a
         sem_scores = np.std(scores, axis=1) / np.sqrt(scores.shape[1])
         plt.bar(model_names, mean_scores, color=colors, yerr=sem_scores, capsize=10, alpha=0.3)
 
+        xs = []
         for m in range(len(model_names)):
-            plt.scatter(m+np.random.normal(0, 0.05, size=scores[m].shape), scores[m], linewidth=0, alpha=0.9, color=colors[m])
+            x = m + np.random.normal(0, 0.05, size=scores[m].shape)
+            xs.append(x)
+            plt.scatter(x, scores[m], linewidth=0, alpha=0.9, color=colors[m])
+
+        for i in range(len(xs[0])):
+            plt.plot([xs[0][i], xs[1][i]], [scores[0][i], scores[1][i]], color='k', alpha=0.1)
 
         # do paired wilcoxon signed rank test
         for m1 in range(len(model_names)):
