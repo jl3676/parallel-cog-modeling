@@ -10,3 +10,6 @@ pip install -r requirements.txt
 The `fit_models.ipynb` file contains example code for simulating data and fitting models using parallelization.
 
 The `src` folder contains the source code for the models.
+
+## MATLAB resources
+See the [Dynamic Noise Estimation](https://github.com/jl3676/dynamic_noise_estimation) repository for examples of parallelizing model fitting in MATLAB.
