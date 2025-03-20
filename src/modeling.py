@@ -2,6 +2,7 @@ import numpy as np
 from scipy.special import softmax
 from scipy.optimize import differential_evolution
 from multiprocessing import Pool
+import src.helpers as helpers
 
 class Environment:
     """
@@ -47,21 +48,26 @@ class ProbabilisticReversalEnvironment(Environment):
         """
         Randomly reset the reward function
         """
+        current_mapping = self.reward_function.copy()
         for state in self.states:
-            self.reward_function[state] = np.random.choice(self.actions)
+            mapping = self.reward_function[state]
+            if np.isnan(mapping):
+                self.reward_function[state] = np.random.choice(self.actions)
+            else:
+                self.reward_function[state] = np.random.choice(list(set(self.actions) - set([mapping])))
 
-    def get_reward(self, state: int, action: int) -> int:
+    def get_reward(self, correct_action: int, action: int) -> int:
         """
-        Get the reward for the given state and action
+        Get the reward for the given correct action and action
 
         Args:
-            state: state
+            correct_action: correct action
             action: action
 
         Returns:
             reward: reward
         """
-        if self.reward_function[state] == action:
+        if correct_action == action:
             return int(np.random.rand() < self.reward_probabilities[1])
         else:
             return int(np.random.rand() < self.reward_probabilities[0])
@@ -208,10 +214,10 @@ class RLModel:
         data[:, 1] = env_data[:, 1].copy()
         data[:, 2] = env_data[:, 2].copy()
         for t in range(n_trials):
-            state = data[t, 2]
+            state = helpers.get_states(data, t)
             action = self.sample_action(state)
-            correct_action = self.env.reward_function[state]
-            reward = self.env.get_reward(state, action)
+            correct_action = helpers.get_correct_actions(env_data, t)
+            reward = self.env.get_reward(correct_action, action)
             self.update_q_value(state, action, reward)
             data[t, 3:] = [correct_action, action, reward]
         return data
@@ -274,7 +280,7 @@ class RLModel:
         n_trials = data.shape[0]
         llh = 0
         for t in range(n_trials):
-            state, action, reward = int(data[t, 2]), int(data[t, 4]), int(data[t, 5])
+            state, action, reward = helpers.get_states(data, t), helpers.get_actions(data, t), helpers.get_rewards(data, t)
             policy = self.softmax_policy(state)
             llh += np.log(policy[action]) 
             self.update_q_value(state, action, reward)
@@ -348,10 +354,10 @@ class StickyRLModel(RLModel):
 
         stick_side = np.zeros(self.n_actions)
         for t in range(n_trials):
-            state = int(data[t, 2])
+            state = helpers.get_states(data, t)
             action = self.sample_action(state, stick_side)
-            correct_action = int(data[t, 3])
-            reward = self.env.get_reward(state, action)
+            correct_action = helpers.get_correct_actions(env_data, t)
+            reward = self.env.get_reward(correct_action, action)
             self.update_q_value(state, action, reward)
             stick_side = np.zeros(self.n_actions)
             stick_side[action] = 1
@@ -374,7 +380,7 @@ class StickyRLModel(RLModel):
         llh = 0
         stick_side = np.zeros(self.n_actions)
         for t in range(n_trials):
-            state, action, reward = int(data[t, 2]), int(data[t, 4]), int(data[t, 5])
+            state, action, reward = helpers.get_states(data, t), helpers.get_actions(data, t), helpers.get_rewards(data, t)
             policy = self.softmax_policy(state, stick_side)
             llh += np.log(policy[action]) 
             self.update_q_value(state, action, reward)
@@ -421,6 +427,7 @@ class Optimizer:
         """
         model_i, participant_i, data, agent, optimization_method = args
         best_params, best_nllh = self.optimize(agent, data, optimization_method)
+        print(f"Model {model_i}, participant {participant_i}: best_nllh = {best_nllh:.2f}")
         return model_i, participant_i, best_params, best_nllh
 
     def fit(self, env: Environment, data: np.ndarray, model_names: list[str], param_names: list[list[str]], param_bounds: list[list[list[float, float]]], optimization_method: str) -> tuple[np.ndarray, np.ndarray]:
@@ -450,7 +457,7 @@ class Optimizer:
 
         with Pool() as pool:
             n_processes = pool._processes
-            print(f"Using at most {n_processes} parallel processes")
+            print(f"Using at most {n_processes} parallel processes\n")
             results = pool.map(self.parallel_optimizer, inputs)
         
         # parse results
